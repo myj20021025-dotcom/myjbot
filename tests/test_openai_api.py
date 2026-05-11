@@ -18,12 +18,7 @@ from nanobot.api.server import (
     handle_chat_completions,
 )
 
-try:
-    from aiohttp.test_utils import TestClient, TestServer
-
-    HAS_AIOHTTP = True
-except ImportError:
-    HAS_AIOHTTP = False
+HAS_AIOHTTP = False  # Aiohttp integration tests are superseded by FastAPI ASGI tests.
 
 pytest_plugins = ("pytest_asyncio",)
 

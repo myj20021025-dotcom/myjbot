@@ -951,12 +951,12 @@ def _patch_cli_command_runtime(
 
 
 def _patch_serve_runtime(monkeypatch, config: Config, seen: dict[str, object]) -> None:
-    pytest.importorskip("aiohttp")
-
     class _FakeApiApp:
         def __init__(self) -> None:
-            self.on_startup: list[object] = []
-            self.on_cleanup: list[object] = []
+            self.events: list[tuple[str, object]] = []
+
+        def add_event_handler(self, event_type: str, func: object) -> None:
+            self.events.append((event_type, func))
 
     class _FakeAgentLoop:
         def __init__(self, **kwargs) -> None:
@@ -974,10 +974,11 @@ def _patch_serve_runtime(monkeypatch, config: Config, seen: dict[str, object]) -
         seen["request_timeout"] = request_timeout
         return _FakeApiApp()
 
-    def _fake_run_app(api_app, host: str, port: int, print):
+    def _fake_uvicorn_run(api_app, host: str, port: int, log_level: str):
         seen["api_app"] = api_app
         seen["host"] = host
         seen["port"] = port
+        seen["log_level"] = log_level
 
     _patch_cli_command_runtime(
         monkeypatch,
@@ -987,7 +988,7 @@ def _patch_serve_runtime(monkeypatch, config: Config, seen: dict[str, object]) -
     )
     monkeypatch.setattr("nanobot.agent.loop.AgentLoop", _FakeAgentLoop)
     monkeypatch.setattr("nanobot.api.server.create_app", _fake_create_app)
-    monkeypatch.setattr("aiohttp.web.run_app", _fake_run_app)
+    monkeypatch.setattr("uvicorn.run", _fake_uvicorn_run)
 
 
 def test_gateway_uses_workspace_from_config_by_default(monkeypatch, tmp_path: Path) -> None:

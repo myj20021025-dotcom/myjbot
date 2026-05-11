@@ -507,9 +507,12 @@ def serve(
 ):
     """Start the OpenAI-compatible API server (/v1/chat/completions)."""
     try:
-        from aiohttp import web  # noqa: F401
+        import uvicorn
     except ImportError:
-        console.print("[red]aiohttp is required. Install with: pip install 'nanobot-ai[api]'[/red]")
+        console.print(
+            "[red]FastAPI/uvicorn are required. "
+            "Install with: pip install 'nanobot-ai[api]'[/red]"
+        )
         raise typer.Exit(1)
 
     from loguru import logger
@@ -572,16 +575,21 @@ def serve(
 
     api_app = create_app(agent_loop, model_name=model_name, request_timeout=timeout)
 
-    async def on_startup(_app):
+    async def on_startup():
         await agent_loop._connect_mcp()
 
-    async def on_cleanup(_app):
+    async def on_cleanup():
         await agent_loop.close_mcp()
 
-    api_app.on_startup.append(on_startup)
-    api_app.on_cleanup.append(on_cleanup)
+    api_app.add_event_handler("startup", on_startup)
+    api_app.add_event_handler("shutdown", on_cleanup)
 
-    web.run_app(api_app, host=host, port=port, print=lambda msg: logger.info(msg))
+    uvicorn.run(
+        api_app,
+        host=host,
+        port=port,
+        log_level="info" if verbose else "warning",
+    )
 
 
 # ============================================================================
