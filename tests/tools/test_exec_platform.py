@@ -177,20 +177,20 @@ class TestPathAppendPlatform:
     @pytest.mark.asyncio
     async def test_windows_modifies_env(self):
         """On Windows, path_append is appended to PATH in the env dict."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"ok", b"")
-        mock_proc.returncode = 0
-
         captured_env = {}
 
-        async def capture_spawn(cmd, cwd, env):
+        async def capture_windows_shell(cmd, cwd, env, timeout):
             captured_env.update(env)
-            return mock_proc
+            return "ok\n\nExit code: 0"
 
         with (
             patch("nanobot.agent.tools.shell._IS_WINDOWS", True),
             patch("nanobot.agent.tools.shell.os.pathsep", ";"),
-            patch.object(ExecTool, "_spawn", side_effect=capture_spawn),
+            patch.object(
+                ExecTool,
+                "_execute_windows_shell",
+                side_effect=capture_windows_shell,
+            ),
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
             tool = ExecTool(path_append=r"C:\tools\bin")
@@ -208,21 +208,28 @@ class TestSandboxPlatform:
     @pytest.mark.asyncio
     async def test_bwrap_skipped_on_windows(self):
         """bwrap must be silently skipped on Windows, not crash."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"ok", b"")
-        mock_proc.returncode = 0
+        captured_cmd = None
+
+        async def capture_windows_shell(cmd, cwd, env, timeout):
+            nonlocal captured_cmd
+            captured_cmd = cmd
+            return "ok\n\nExit code: 0"
 
         with (
             patch("nanobot.agent.tools.shell._IS_WINDOWS", True),
-            patch.object(ExecTool, "_spawn", return_value=mock_proc) as mock_spawn,
+            patch.object(
+                ExecTool,
+                "_execute_windows_shell",
+                side_effect=capture_windows_shell,
+            ),
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
             tool = ExecTool(sandbox="bwrap")
             result = await tool.execute(command="dir")
 
         assert "ok" in result
-        spawned_cmd = mock_spawn.call_args[0][0]
-        assert "bwrap" not in spawned_cmd
+        assert captured_cmd is not None
+        assert "bwrap" not in captured_cmd
 
     @pytest.mark.asyncio
     async def test_bwrap_applied_on_unix(self):
@@ -254,13 +261,13 @@ class TestExecuteEndToEnd:
     @pytest.mark.asyncio
     async def test_windows_full_path(self):
         """Full execute() flow on Windows: env, spawn, output formatting."""
-        mock_proc = AsyncMock()
-        mock_proc.communicate.return_value = (b"hello world\r\n", b"")
-        mock_proc.returncode = 0
-
         with (
             patch("nanobot.agent.tools.shell._IS_WINDOWS", True),
-            patch.object(ExecTool, "_spawn", return_value=mock_proc),
+            patch.object(
+                ExecTool,
+                "_execute_windows_shell",
+                return_value="hello world\r\n\nExit code: 0",
+            ),
             patch.object(ExecTool, "_guard_command", return_value=None),
         ):
             tool = ExecTool()
